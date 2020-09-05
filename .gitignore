@@ -3,7 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.csv
-*.json
+csv*.json
+data.json
 scrap-iso.py
 *.db
 # C extensions
