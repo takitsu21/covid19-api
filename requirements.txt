@@ -1,0 +1,5 @@
+flask
+flask_caching
+flask_limiter
+requests
+python-decouple
