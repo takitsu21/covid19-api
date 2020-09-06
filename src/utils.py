@@ -16,6 +16,12 @@ CSV_CONFIRMED = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/maste
 CSV_DEATHS = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
 CSV_RECOVERED = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
 
+CSV_CONFIRMED_US = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"
+CSV_DEATHS_US = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv"
+
+CSV_CONFIRMED_FPATH_US = "csv_confirmed_us.csv"
+CSV_DEATHS_FPATH_US = "csv_deaths_us.csv"
+
 CSV_CONFIRMED_FPATH = "csv_confirmed.csv"
 CSV_DEATHS_FPATH = "csv_deaths.csv"
 CSV_RECOVERD_FPATH = "csv_recovered.csv"
@@ -58,9 +64,16 @@ def update():
         dl_csv(CSV_CONFIRMED, CSV_CONFIRMED_FPATH)
         dl_csv(CSV_DEATHS, CSV_DEATHS_FPATH)
         dl_csv(CSV_RECOVERED, CSV_RECOVERD_FPATH)
+        dl_csv(CSV_CONFIRMED_US, CSV_CONFIRMED_FPATH_US)
+        dl_csv(CSV_DEATHS_US, CSV_DEATHS_FPATH_US)
         csv_to_json(CSV_CONFIRMED_FPATH)
         csv_to_json(CSV_DEATHS_FPATH)
         csv_to_json(CSV_RECOVERD_FPATH)
+        region_csv_to_json(CSV_CONFIRMED_FPATH)
+        region_csv_to_json(CSV_DEATHS_FPATH)
+        region_csv_to_json(CSV_RECOVERD_FPATH)
+        region_csv_to_json(CSV_CONFIRMED_FPATH_US, is_us=True)
+        region_csv_to_json(CSV_DEATHS_FPATH_US, is_us=True)
         store_data()
         time.sleep(30 * 60)
 
@@ -106,6 +119,70 @@ def csv_to_json(csv_fpath):
         with open(csv_fpath.replace(".csv", ".json"), "w+") as f:
             f.write(str(json.dumps(csv_json)))
 
+def region_csv_to_json(csv_fpath, is_us=False):
+    csv_json = {}
+    if is_us:
+        province_key = "Province_State"
+        country_key = "Country_Region"
+        key_start = 12
+    else:
+        province_key = "Province/State"
+        country_key = "Country/Region"
+        key_start = 4
+    with open("iso-3166.json", "r") as isof:
+        iso_data = json.load(isof)
+    with open(csv_fpath, "r") as csv_file:
+        data = csv.DictReader(csv_file)
+        for row in data:
+            if not len(row[province_key]):
+                continue
+            if row[country_key] in SPECIAL_CASES:
+                country = SPECIAL_CASES[row[country_key]]["name"]
+            else:
+                country = row[country_key]
+            if (country not in csv_json):
+
+                csv_json[country] = {"regions": {}}
+                province = row[province_key]
+                for key in list(row.keys())[key_start:]:
+                    try:
+                        new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
+                    except:
+                        print(key)
+                    if province not in csv_json[country]["regions"]:
+                        csv_json[country]["regions"][province] = {
+                            "history": {}
+                        }
+                    csv_json[country]["regions"][province]["history"][new_k] = int(row[key])
+            else:
+                province = row[province_key]
+                for key in list(row.keys())[key_start:]:
+                    new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
+                    if province not in csv_json[country]["regions"]:
+                        csv_json[country]["regions"][province] = {
+                            "history": {}
+                        }
+                    if is_us and csv_json[country]["regions"][province]["history"].get(new_k):
+                        csv_json[country]["regions"][province]["history"][new_k] += int(row[key])
+                    else:
+                        csv_json[country]["regions"][province]["history"][new_k] = int(row[key])
+
+        for k in csv_json.keys():
+            for iso in iso_data:
+                if k.lower() == iso["name"].lower():
+                    csv_json[k]["iso2"] = iso["iso2"]
+                    csv_json[k]["iso3"] = iso["iso3"]
+            if k in SPECIAL_CASES:
+                csv_json[SPECIAL_CASES[k]["name"]]["iso2"] = SPECIAL_CASES[k]["iso2"]
+                csv_json[SPECIAL_CASES[k]["name"]]["iso3"] = SPECIAL_CASES[k]["iso3"]
+                continue
+            if not csv_json[k].get("iso2"):
+                csv_json[k]["iso2"] = ""
+                csv_json[k]["iso3"] = ""
+
+        with open(csv_fpath.replace(".csv", "_region.json"), "w+") as f:
+            f.write(str(json.dumps(csv_json)))
+
 def store_data():
     timestamp_update = int(time.time())
     r = requests.get(APIFY_URL)
@@ -140,6 +217,9 @@ def read_json(fpath: str):
         data = json.load(f)
     return data
 
+def pattern_match(to_match, *patterns):
+    return to_match.lower() in map(lambda x: x.lower(), patterns)
+
 def insert_user(ip, user_agent):
     with sqlite3.connect("user_list.db") as conn:
         c = conn.cursor()
@@ -161,8 +241,14 @@ def require_appkey(view_function):
             return jsonify({"status": 401, "description": "This app required an API KEY if you would like to have one come over my discord https://discord.gg/wTxbQYb and ask to Taki#0853"})
     return decorated_function
 
+def no_limit_owner():
+    return request.headers.get("Authorization") and request.headers.get("Authorization") == config("Authorization")
+
 def response_error(status=500, message="Internal server error"):
     return jsonify({
         "status": status,
         "message": message
     })
+
+if __name__ == "__main__":
+    update()
