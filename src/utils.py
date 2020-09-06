@@ -145,10 +145,7 @@ def region_csv_to_json(csv_fpath, is_us=False):
                 csv_json[country] = {"regions": {}}
                 province = row[province_key]
                 for key in list(row.keys())[key_start:]:
-                    try:
-                        new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
-                    except:
-                        print(key)
+                    new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
                     if province not in csv_json[country]["regions"]:
                         csv_json[country]["regions"][province] = {
                             "history": {}
@@ -183,6 +180,38 @@ def region_csv_to_json(csv_fpath, is_us=False):
         with open(csv_fpath.replace(".csv", "_region.json"), "w+") as f:
             f.write(str(json.dumps(csv_json)))
 
+def find_val_replace_null(country, data, base):
+    try:
+        return list(data[country]["history"].values())[-1]
+    except KeyError:
+        if base is None:
+            return 0
+    return base
+
+def replace_null_value(dataset: list):
+    new_dataset = []
+    data_c = read_json(CSV_CONFIRMED_FPATH.replace(".csv", ".json"))
+    data_r = read_json(CSV_RECOVERD_FPATH.replace(".csv", ".json"))
+    data_d = read_json(CSV_DEATHS_FPATH.replace(".csv", ".json"))
+    for kv_replace in dataset:
+        tmp = kv_replace
+        confirmed = find_val_replace_null(tmp["country"], data_c, tmp["totalCases"])
+        recovered = find_val_replace_null(tmp["country"], data_r, tmp["totalRecovered"])
+        deaths = find_val_replace_null(tmp["country"], data_d, tmp["totalDeaths"])
+        if tmp["totalCases"] is None:
+            tmp["totalCases"] = confirmed
+        if tmp["activeCases"] is None:
+            tmp["activeCases"] = confirmed - (recovered + deaths)
+        if tmp["newCases"] is None:
+            tmp["newCases"] = 0
+        if tmp["totalDeaths"] is None:
+            tmp["totalDeaths"] = deaths
+        if tmp["totalRecovered"] is None:
+            tmp["totalRecovered"] = recovered
+        new_dataset.append(tmp)
+    return new_dataset
+
+
 def store_data():
     timestamp_update = int(time.time())
     r = requests.get(APIFY_URL)
@@ -208,6 +237,7 @@ def store_data():
         apify["lastUpdate"] = timestamp_update
         merged_data.append(apify)
 
+    merged_data = replace_null_value(merged_data)
     with open("data.json", "w+") as fd:
         dumps = json.dumps(merged_data)
         fd.write(str(dumps))

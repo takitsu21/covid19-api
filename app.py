@@ -37,6 +37,7 @@ ROUTES = [
     f"{BASE_PATH}/api/{API_VERSION}/all/",
     f"{BASE_PATH}/api/{API_VERSION}/all/<country>",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>",
+    f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/total",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/regions",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/<region_name>"
@@ -146,6 +147,25 @@ def history_region_all(data_type, country):
                 data[inner_country]["iso3"]):
                 return jsonify(data[inner_country]["regions"])
         raise RegionNotFound("This region cannot be found. Please try again.")
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+@app.route(f"/api/{API_VERSION}/history/<data_type>/total", methods=["GET"])
+@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
+# @util.require_appkey
+@cache.cached()
+def history_region_world(data_type):
+    try:
+
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"history" : {}}
+        for d in data.keys():
+            for h in data[d]["history"].keys():
+                if h not in ret["history"]:
+                    ret["history"][h] = int(data[d]["history"][h])
+                else:
+                    ret["history"][h] += int(data[d]["history"][h])
+        return jsonify(ret)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
