@@ -1,0 +1,9 @@
+version: '3'
+services:
+  covid19api:
+    image: "covid19-api:v1"
+    build: .
+    volumes:
+      - ./flask-deploy
+    ports:
+      - 5000:5000
