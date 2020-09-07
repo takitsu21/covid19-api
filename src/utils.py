@@ -11,6 +11,8 @@ from decouple import config
 from flask import jsonify, request
 from flask_limiter.util import get_remote_address
 
+AUTHORIZATION = config("Authorization")
+
 APIFY_URL = "https://api.apify.com/v2/key-value-stores/SmuuI0oebnTWjRTUh/records/LATEST?disableRedirect=true"
 CSV_CONFIRMED = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
 CSV_DEATHS = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
@@ -60,22 +62,20 @@ SPECIAL_CASES = {
 }
 
 def update():
-    while True:
-        dl_csv(CSV_CONFIRMED, CSV_CONFIRMED_FPATH)
-        dl_csv(CSV_DEATHS, CSV_DEATHS_FPATH)
-        dl_csv(CSV_RECOVERED, CSV_RECOVERD_FPATH)
-        dl_csv(CSV_CONFIRMED_US, CSV_CONFIRMED_FPATH_US)
-        dl_csv(CSV_DEATHS_US, CSV_DEATHS_FPATH_US)
-        csv_to_json(CSV_CONFIRMED_FPATH)
-        csv_to_json(CSV_DEATHS_FPATH)
-        csv_to_json(CSV_RECOVERD_FPATH)
-        region_csv_to_json(CSV_CONFIRMED_FPATH)
-        region_csv_to_json(CSV_DEATHS_FPATH)
-        region_csv_to_json(CSV_RECOVERD_FPATH)
-        region_csv_to_json(CSV_CONFIRMED_FPATH_US, is_us=True)
-        region_csv_to_json(CSV_DEATHS_FPATH_US, is_us=True)
-        store_data()
-        time.sleep(30 * 60)
+    dl_csv(CSV_CONFIRMED, CSV_CONFIRMED_FPATH)
+    dl_csv(CSV_DEATHS, CSV_DEATHS_FPATH)
+    dl_csv(CSV_RECOVERED, CSV_RECOVERD_FPATH)
+    dl_csv(CSV_CONFIRMED_US, CSV_CONFIRMED_FPATH_US)
+    dl_csv(CSV_DEATHS_US, CSV_DEATHS_FPATH_US)
+    csv_to_json(CSV_CONFIRMED_FPATH)
+    csv_to_json(CSV_DEATHS_FPATH)
+    csv_to_json(CSV_RECOVERD_FPATH)
+    region_csv_to_json(CSV_CONFIRMED_FPATH)
+    region_csv_to_json(CSV_DEATHS_FPATH)
+    region_csv_to_json(CSV_RECOVERD_FPATH)
+    region_csv_to_json(CSV_CONFIRMED_FPATH_US, is_us=True)
+    region_csv_to_json(CSV_DEATHS_FPATH_US, is_us=True)
+    store_data()
 
 def dl_csv(csv_type, fpath):
     r = requests.get(csv_type)
@@ -220,6 +220,8 @@ def store_data():
         iso_data = json.load(isof)
     merged_data = []
     for apify in apify_data["regionData"]:
+        if apify["country"] == "Total:":
+            continue
         iso_found = False
         apify_normalized = unicodedata.normalize('NFKD', apify["country"]).encode('ascii', 'ignore').decode("utf-8")
         if apify_normalized in SPECIAL_CASES:
@@ -231,7 +233,7 @@ def store_data():
                 apify["iso3"] = iso["iso3"]
                 iso_found = True
                 break
-        if not iso_found and apify["country"] != "Total:":
+        if not iso_found:
             apify["iso2"] = ""
             apify["iso3"] = ""
         apify["lastUpdate"] = timestamp_update
@@ -260,16 +262,28 @@ def insert_user(ip, user_agent):
 def require_appkey(view_function):
     @wraps(view_function)
     def decorated_function(*args, **kwargs):
-        try:
-            ip = get_remote_address()
-            insert_user(str(ip), request.headers.get("User-Agent"))
-        except Exception as exc:
-            pass
-        if request.headers.get('Authorization') and request.headers.get('Authorization') == config("Authorization"):
+        # try:
+        #     ip = get_remote_address()
+        #     insert_user(str(ip), request.headers.get("User-Agent"))
+        # except Exception as exc:
+        #     pass
+        if request.headers.get('Authorization') and \
+            request.headers.get('Authorization') == AUTHORIZATION:
             return view_function(*args, **kwargs)
         else:
             return jsonify({"status": 401, "description": "This app required an API KEY if you would like to have one come over my discord https://discord.gg/wTxbQYb and ask to Taki#0853"})
     return decorated_function
+
+# def identify_user(view_function):
+#     @wraps(view_function)
+#     def decorated_function(*args, **kwargs):
+#         try:
+#             ip = get_remote_address()
+#             insert_user(str(ip), request.headers.get("User-Agent"))
+#         except Exception as exc:
+#             print(type(exc), exc)
+#         return view_function(*args, **kwargs)
+#     return decorated_function
 
 def no_limit_owner():
     return request.headers.get("Authorization") and request.headers.get("Authorization") == config("Authorization")
@@ -281,4 +295,4 @@ def response_error(status=500, message="Internal server error"):
     })
 
 if __name__ == "__main__":
-    update()
+    update() # crontab

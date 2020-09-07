@@ -15,21 +15,6 @@ from flask_limiter.util import get_remote_address
 import src.utils as util
 from src.errors import RegionNotFound
 
-app = Flask(__name__)
-app.url_map.strict_slashes = False
-limiter = Limiter(
-    app,
-    get_remote_address,
-    default_limits=["3/second", "60/minute", "1000/hour"]
-
-)
-cache = Cache(
-    app,
-    config={
-        "CACHE_TYPE": "simple",
-        "CACHE_DEFAULT_TIMEOUT": 30 * 60 # 30 minutes caching
-    }
-)
 
 API_VERSION = "v1"
 BASE_PATH = config("BASE_PATH")
@@ -46,7 +31,30 @@ SOURCES = [
     "https://github.com/CSSEGISandData/COVID-19",
     "https://www.worldometers.info/coronavirus/"
 ]
+route_homepage = {
+    "routes": ROUTES,
+    "<data_type>": "confirmed | recovered | deaths",
+    "Api version": API_VERSION,
+    "discord": "https://discord.gg/wTxbQYb",
+    "sources": SOURCES,
+    "github": "https://github.com/takitsu21/covid19-api"
+}
 
+app = Flask(__name__)
+app.url_map.strict_slashes = False
+limiter = Limiter(
+    app,
+    get_remote_address,
+    default_limits=["3/second", "60/minute", "1000/hour"]
+
+)
+cache = Cache(
+    app,
+    config={
+        "CACHE_TYPE": "simple",
+        "CACHE_DEFAULT_TIMEOUT": 30 * 60 # 30 minutes caching
+    }
+)
 
 @app.route(f"/api/{API_VERSION}/all/", methods=["GET"])
 @limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
@@ -171,40 +179,32 @@ def history_region_world(data_type):
 
 @app.route("/")
 @limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
+@cache.cached()
 def index():
-    route_error = {
-        "routes": ROUTES,
-        "<data_type>": "confirmed | recovered | deaths",
-        "Api version": API_VERSION,
-        "discord": "https://discord.gg/wTxbQYb",
-        "sources": SOURCES
-        }
-    return jsonify(route_error)
+    return jsonify(route_homepage)
 
 @app.route(f"/api/")
 @limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-def version_index():
-    route_error = {
-        "routes": ROUTES,
-        "<data_type>": "confirmed | recovered | deaths",
-        "Api version": API_VERSION,
-        "discord": "https://discord.gg/wTxbQYb",
-        "sources": SOURCES
-        }
-    return jsonify(route_error)
+@cache.cached()
+def index_api():
+    return jsonify(route_homepage)
 
 
-if __name__ == '__main__':
-    try:
-        thread1 = threading.Thread(target=util.update)
-        thread1.start()
-        app.run(host="0.0.0.0", port=5000)
-    except KeyboardInterrupt:
-        with app.app_context():
-            cache.clear()
-        exit(0)
-    except Exception as e:
-        print(type(e).__name__, e)
-        with app.app_context():
-            cache.clear()
-        exit(1)
+@app.route(f"/api/v1/")
+@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
+@cache.cached()
+def index_api_version():
+    return jsonify(route_homepage)
+
+# if __name__ == '__main__':
+#     try:
+#         app.run(debug=True, host="0.0.0.0", port=5000)
+#     except KeyboardInterrupt:
+#         with app.app_context():
+#             cache.clear()
+#         exit(0)
+#     except Exception as e:
+#         print(type(e).__name__, e)
+#         with app.app_context():
+#             cache.clear()
+#         exit(1)
