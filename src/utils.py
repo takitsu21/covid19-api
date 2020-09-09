@@ -8,7 +8,7 @@ from functools import wraps
 
 import requests
 from decouple import config
-from flask import jsonify, request
+from flask import jsonify, request, Response
 from flask_limiter.util import get_remote_address
 
 AUTHORIZATION = config("Authorization")
@@ -274,25 +274,11 @@ def require_appkey(view_function):
             return jsonify({"status": 401, "description": "This app required an API KEY if you would like to have one come over my discord https://discord.gg/wTxbQYb and ask to Taki#0853"})
     return decorated_function
 
-# def identify_user(view_function):
-#     @wraps(view_function)
-#     def decorated_function(*args, **kwargs):
-#         try:
-#             ip = get_remote_address()
-#             insert_user(str(ip), request.headers.get("User-Agent"))
-#         except Exception as exc:
-#             print(type(exc), exc)
-#         return view_function(*args, **kwargs)
-#     return decorated_function
-
 def no_limit_owner():
     return request.headers.get("Authorization") and request.headers.get("Authorization") == config("Authorization")
 
 def response_error(status=500, message="Internal server error"):
-    return jsonify({
-        "status": status,
-        "message": message
-    })
+    return Response(response=message, status=status)
 
 if __name__ == "__main__":
     update() # crontab

@@ -1,24 +1,26 @@
 import json
+import os
 import sqlite3
 import sys
 import threading
 import time
 
 from decouple import config
-from flask import Blueprint, Flask, Response, abort, jsonify, request
+from flask import Blueprint, Flask, Response, abort, jsonify, request, url_for
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-# from flask_restful import Api, Resource
-# from flask_restful_swagger import swagger
+from flask_restplus import Api, Resource, fields
 
 import src.utils as util
-from src.errors import RegionNotFound
+from src.errors import RegionNotFound, CountryNotFound
 
+# from flask_restful import Api, Resource
 
 API_VERSION = "v1"
 BASE_PATH = config("BASE_PATH")
 ROUTES = [
+    f"{BASE_PATH}/doc/",
     f"{BASE_PATH}/api/{API_VERSION}/all/",
     f"{BASE_PATH}/api/{API_VERSION}/all/<country>",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>",
@@ -32,6 +34,7 @@ SOURCES = [
     "https://www.worldometers.info/coronavirus/"
 ]
 route_homepage = {
+    "documentation": f"{BASE_PATH}/doc",
     "routes": ROUTES,
     "<data_type>": "confirmed | recovered | deaths",
     "Api version": API_VERSION,
@@ -39,39 +42,48 @@ route_homepage = {
     "sources": SOURCES,
     "github": "https://github.com/takitsu21/covid19-api"
 }
+responses = {
+    200: 'Success',
+    401: 'Unhautorized',
+    429: 'Rate limited'
+}
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 limiter = Limiter(
     app,
     get_remote_address,
-    default_limits=["3/second", "60/minute", "1000/hour"]
-
+    default_limits=["3/second", "60/minute", "2000/hour"],
+    default_limits_exempt_when=util.no_limit_owner
 )
 cache = Cache(
     app,
     config={
         "CACHE_TYPE": "simple",
-        "CACHE_DEFAULT_TIMEOUT": 30 * 60 # 30 minutes caching
+        "CACHE_DEFAULT_TIMEOUT": 15 * 60 # 30 minutes caching
     }
 )
+class SSLApiDoc(Api):
+    @property
+    def specs_url(self):
+        """Monkey patch for HTTPS"""
+        scheme = 'http' if '5000' in self.base_url else 'https'
+        return url_for(self.endpoint('specs'), _external=True, _scheme=scheme)
 
-@app.route(f"/api/{API_VERSION}/all/", methods=["GET"])
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-# @util.require_appkey
-@cache.cached()
-def tracker():
+api = SSLApiDoc(app, doc='/doc/', version='1.0', title='COVID19 API',
+        description="Coronavirus COVID 19 API")
+
+
+@cache.memoize()
+def all_data():
     try:
         data = util.read_json("data.json")
         return jsonify(data)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
-@app.route(f"/api/{API_VERSION}/all/<country>/", methods=["GET"])
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-# @util.require_appkey
-@cache.cached()
-def tracker_country(country):
+@cache.memoize()
+def all_country(country):
     try:
         data = util.read_json("data.json")
         for region in data:
@@ -81,14 +93,13 @@ def tracker_country(country):
                 region["iso2"],
                 region["iso3"]):
                 return jsonify(region)
-        raise RegionNotFound("This region cannot be found. Please try again.")
+        raise CountryNotFound("This region cannot be found. Please try again.")
+    except CountryNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
-@app.route(f"/api/{API_VERSION}/history/<data_type>/", methods=["GET"])
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-# @util.require_appkey
-@cache.cached()
+@cache.memoize()
 def history(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
@@ -96,10 +107,7 @@ def history(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
-@app.route(f"/api/{API_VERSION}/history/<data_type>/<country>/", methods=["GET"])
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-# @util.require_appkey
-@cache.cached()
+@cache.memoize()
 def history_country(data_type, country):
     try:
         data = util.read_json(f"csv_{data_type}.json")
@@ -110,14 +118,13 @@ def history_country(data_type, country):
                 data[region]["iso2"],
                 data[region]["iso3"]):
                 return jsonify(data[region])
-        raise RegionNotFound("This region cannot be found. Please try again.")
+        raise CountryNotFound("This region cannot be found. Please try again.")
+    except CountryNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
-@app.route(f"/api/{API_VERSION}/history/<data_type>/<country>/<region_name>", methods=["GET"])
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-# @util.require_appkey
-@cache.cached()
+@cache.memoize()
 def history_region(data_type, country, region_name):
     try:
         if country.lower() in ("us", "united states", "usa"):
@@ -134,13 +141,12 @@ def history_region(data_type, country, region_name):
                     if region.lower() == region_name.lower():
                         return jsonify(data[inner_country]["regions"][region])
         raise RegionNotFound("This region cannot be found. Please try again.")
+    except RegionNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
-@app.route(f"/api/{API_VERSION}/history/<data_type>/<country>/regions", methods=["GET"])
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-# @util.require_appkey
-@cache.cached()
+@cache.memoize()
 def history_region_all(data_type, country):
     try:
         if country.lower() in ("us", "united states", "usa"):
@@ -154,14 +160,13 @@ def history_region_all(data_type, country):
                 data[inner_country]["iso2"],
                 data[inner_country]["iso3"]):
                 return jsonify(data[inner_country]["regions"])
-        raise RegionNotFound("This region cannot be found. Please try again.")
+        raise CountryNotFound("This country cannot be found. Please try again.")
+    except CountryNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
-@app.route(f"/api/{API_VERSION}/history/<data_type>/total", methods=["GET"])
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-# @util.require_appkey
-@cache.cached()
+@cache.memoize()
 def history_region_world(data_type):
     try:
 
@@ -177,24 +182,75 @@ def history_region_world(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
+
+@api.route(f"/api/{API_VERSION}/all/")
+class All(Resource):
+    @api.doc(responses=responses)
+    def get(self):
+        return all_data()
+
+
+@api.route(f"/api/{API_VERSION}/all/<country>/")
+class AllSelector(Resource):
+    @api.doc(responses=responses)
+    def get(self, country):
+        return all_country(country)
+
+
+@api.route(f"/api/{API_VERSION}/history/<data_type>/")
+class HistoryDataType(Resource):
+    @api.doc(
+        responses=responses)
+    def get(self, data_type: int):
+        return history(data_type)
+
+
+@api.route(f"/api/{API_VERSION}/history/<data_type>/<country>/")
+class HistoryDataTypeCountry(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+    def get(self, data_type: str, country: str):
+        return history_country(data_type, country)
+
+
+@api.route(f"/api/{API_VERSION}/history/<data_type>/<country>/<region>")
+class HistoryDataTypeRegion(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1", "region": "Region name"})
+    def get(self, data_type: str, country: str, region: str):
+        return history_region(data_type, country, region)
+
+
+@api.route(f"/api/{API_VERSION}/history/<data_type>/<country>/regions")
+class HistoryDataTypeRegions(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+    def get(self, data_type: str, country: str):
+        return history_region_all(data_type, country)
+
+
+@api.route(f"/api/{API_VERSION}/history/<data_type>/total")
+class HistoryDataTypeTotal(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+    def get(self, data_type: str):
+        return history_region_world(data_type)
+
+
 @app.route("/")
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-@cache.cached()
 def index():
     return jsonify(route_homepage)
 
 @app.route(f"/api/")
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-@cache.cached()
 def index_api():
     return jsonify(route_homepage)
 
 
 @app.route(f"/api/v1/")
-@limiter.limit("3/second;60/minute;2000/hour", exempt_when=util.no_limit_owner)
-@cache.cached()
 def index_api_version():
     return jsonify(route_homepage)
+
 
 # if __name__ == '__main__':
 #     try:
