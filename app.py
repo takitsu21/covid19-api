@@ -186,6 +186,78 @@ def history_region_world(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+@cache.memoize()
+def proportion(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        for region in list(data.keys()):
+            ret = {"proportion_history" : {}}
+            if data[region]["iso3"] == "":
+                # TODO: Note, some regions do not have iso2/3 codes....
+                data[region] = {"proportion_history" : "This region doesn't work with this function atm"}
+                continue
+            if data[region]["iso3"] in util.populations:
+                pop = float(util.populations[data[region]["iso3"]])
+            else:
+                util.populations = util.csv_to_dict(util.CSV_POPULATIONS)
+                pop = float(util.populations[data[region]["iso3"]])
+
+            for d, h in data[region]["history"].items():
+                ret["proportion_history"][d] = f"{round(h / pop * 100, 5):.5f}"
+
+            ret["iso2"] = data[region]["iso2"]
+            ret["iso3"] = data[region]["iso3"]
+            data[region] = ret
+        return jsonify(data)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+@cache.memoize()
+def proportion_country(data_type, country):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"proportion_history" : {}}
+        for region in list(data.keys()):
+            if util.pattern_match(
+                country,
+                region,
+                data[region]["iso2"],
+                data[region]["iso3"]):
+                if data[region]["iso3"] in util.populations:
+                    pop = float(util.populations[data[region]["iso3"]])
+                else:
+                    util.populations = util.csv_to_dict(util.CSV_POPULATIONS)
+                    pop = float(util.populations[data[region]["iso3"]])
+
+                for d, h in data[region]["history"].items():
+                    ret["proportion_history"][d] = f"{round(h / pop * 100, 5):.5f}"
+
+                ret["iso2"] = data[region]["iso2"]
+                ret["iso3"] = data[region]["iso3"]
+                return jsonify(ret)
+        raise CountryNotFound("This region cannot be found. Please try again.")
+    except CountryNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+
+@cache.memoize()
+def proportion_region_world(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"proportion_history" : {}}
+        for d in data.keys():
+            for h in data[d]["history"].keys():
+                if h not in ret["proportion_history"]:
+                    ret["proportion_history"][h] = int(data[d]["history"][h])
+                else:
+                    ret["proportion_history"][h] += int(data[d]["history"][h])
+        for h in ret["proportion_history"]:
+            ret["proportion_history"][h] = f"{round(int(ret['proportion_history'][h]) / int(util.WORLD_POPULATION) * 100, 5):.5f}"
+        return jsonify(ret)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
 
 
 @api.route(f"/api/{API_VERSION}/all/")
