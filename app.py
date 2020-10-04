@@ -31,6 +31,9 @@ ROUTES = [
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>",
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/total",
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/<country>"
+    f"{BASE_PATH}/api/{API_VERSION}/daily-change/<data_type>",
+    f"{BASE_PATH}/api/{API_VERSION}/daily-change/<data_type>/total",
+    f"{BASE_PATH}/api/{API_VERSION}/daily-change/<data_type>/<country>"
 ]
 SOURCES = [
     "https://github.com/CSSEGISandData/COVID-19",
@@ -259,6 +262,70 @@ def proportion_region_world(data_type):
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
 
+@cache.memoize()
+def daily_change(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        for region in list(data.keys()):
+            ret = {"daily_change" : {}}
+
+            prev = 0
+            for d, h in data[region]["history"].items():
+                ret["daily_change"][d] = h - prev
+                prev = int(h)
+
+            ret["iso2"] = data[region]["iso2"]
+            ret["iso3"] = data[region]["iso3"]
+            data[region] = ret
+        return jsonify(data)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+
+@cache.memoize()
+def daily_change_region_world(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"daily_change" : {}}
+        for d in data.keys():
+            for h in data[d]["history"].keys():
+                if h not in ret["daily_change"]:
+                    ret["daily_change"][h] = int(data[d]["history"][h])
+                else:
+                    ret["daily_change"][h] += int(data[d]["history"][h])
+        prev = 0
+        for h in ret["daily_change"]:
+            ret["daily_change"][h] = int(ret['daily_change'][h]) - prev
+            prev = int(ret['daily_change'][h])
+        return jsonify(ret)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+@cache.memoize()
+def daily_change_country(data_type, country):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"daily_change" : {}}
+        for region in list(data.keys()):
+            if util.pattern_match(
+                country,
+                region,
+                data[region]["iso2"],
+                data[region]["iso3"]):
+                prev = 0
+                for d, h in data[region]["history"].items():
+                    ret["daily_change"][d] = h - prev
+                    prev = h
+                ret["iso2"] = data[region]["iso2"]
+                ret["iso3"] = data[region]["iso3"]
+                return jsonify(ret)
+        raise CountryNotFound("This region cannot be found. Please try again.")
+    except CountryNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+
 @api.route(f"/api/{API_VERSION}/all/")
 class All(Resource):
     @api.doc(responses=responses)
@@ -334,6 +401,27 @@ class ProportionDataTypeCountry(Resource):
     params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return proportion_country(data_type, country)
+
+@api.route(f"/api/{API_VERSION}/daily-change/<data_type>/")
+class DailyChangeDataType(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+    def get(self, data_type: str):
+        return daily_change(data_type)
+
+@api.route(f"/api/{API_VERSION}/daily-change/<data_type>/total")
+class ProportionDataTypeTotal(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+    def get(self, data_type: str):
+        return daily_change_region_world(data_type)
+
+@api.route(f"/api/{API_VERSION}/daily-change/<data_type>/<country>/")
+class ProportionDataTypeCountry(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+    def get(self, data_type: str, country: str):
+        return daily_change_country(data_type, country)
 
 
 @app.route("/")
