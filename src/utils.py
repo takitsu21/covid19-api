@@ -28,6 +28,11 @@ CSV_CONFIRMED_FPATH = "csv_confirmed.csv"
 CSV_DEATHS_FPATH = "csv_deaths.csv"
 CSV_RECOVERD_FPATH = "csv_recovered.csv"
 
+CSV_POPULATIONS = "data/populations.csv"
+populations = {}
+
+WORLD_POPULATION = 7800000000
+
 SPECIAL_CASES = {
     "US": {
         "name": "United States",
@@ -179,6 +184,15 @@ def region_csv_to_json(csv_fpath, is_us=False):
 
         with open(csv_fpath.replace(".csv", "_region.json"), "w+") as f:
             f.write(str(json.dumps(csv_json)))
+
+def csv_to_dict(csv_fpath):
+    with open(csv_fpath, "r") as csv_file:
+        dict_out = {}
+        for line in csv_file:
+            line = line.strip('\n')
+            l = line.split(',')
+            dict_out[l[0]] = l[1]
+        return dict_out
 
 def find_val_replace_null(country, data, base):
     try:

@@ -27,7 +27,10 @@ ROUTES = [
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/total",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/regions",
-    f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/<region_name>"
+    f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/<region_name>",
+    f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>",
+    f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/total",
+    f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/<country>"
 ]
 SOURCES = [
     "https://github.com/CSSEGISandData/COVID-19",
@@ -182,6 +185,78 @@ def history_region_world(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+@cache.memoize()
+def proportion(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        for region in list(data.keys()):
+            ret = {"proportion_history" : {}}
+            if data[region]["iso3"] == "":
+                # TODO: Note, some regions do not have iso2/3 codes....
+                data[region] = {"proportion_history" : "This region doesn't work with this function atm"}
+                continue
+            if data[region]["iso3"] in util.populations:
+                pop = float(util.populations[data[region]["iso3"]])
+            else:
+                util.populations = util.csv_to_dict(util.CSV_POPULATIONS)
+                pop = float(util.populations[data[region]["iso3"]])
+
+            for d, h in data[region]["history"].items():
+                ret["proportion_history"][d] = f"{round(h / pop * 100, 5):.5f}"
+
+            ret["iso2"] = data[region]["iso2"]
+            ret["iso3"] = data[region]["iso3"]
+            data[region] = ret
+        return jsonify(data)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+@cache.memoize()
+def proportion_country(data_type, country):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"proportion_history" : {}}
+        for region in list(data.keys()):
+            if util.pattern_match(
+                country,
+                region,
+                data[region]["iso2"],
+                data[region]["iso3"]):
+                if data[region]["iso3"] in util.populations:
+                    pop = float(util.populations[data[region]["iso3"]])
+                else:
+                    util.populations = util.csv_to_dict(util.CSV_POPULATIONS)
+                    pop = float(util.populations[data[region]["iso3"]])
+
+                for d, h in data[region]["history"].items():
+                    ret["proportion_history"][d] = f"{round(h / pop * 100, 5):.5f}"
+
+                ret["iso2"] = data[region]["iso2"]
+                ret["iso3"] = data[region]["iso3"]
+                return jsonify(ret)
+        raise CountryNotFound("This region cannot be found. Please try again.")
+    except CountryNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+
+@cache.memoize()
+def proportion_region_world(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"proportion_history" : {}}
+        for d in data.keys():
+            for h in data[d]["history"].keys():
+                if h not in ret["proportion_history"]:
+                    ret["proportion_history"][h] = int(data[d]["history"][h])
+                else:
+                    ret["proportion_history"][h] += int(data[d]["history"][h])
+        for h in ret["proportion_history"]:
+            ret["proportion_history"][h] = f"{round(int(ret['proportion_history'][h]) / int(util.WORLD_POPULATION) * 100, 5):.5f}"
+        return jsonify(ret)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
 
 
 @api.route(f"/api/{API_VERSION}/all/")
@@ -236,6 +311,29 @@ class HistoryDataTypeTotal(Resource):
     params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
     def get(self, data_type: str):
         return history_region_world(data_type)
+
+
+@api.route(f"/api/{API_VERSION}/proportion/<data_type>/")
+class ProportionDataType(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+    def get(self, data_type: str):
+        return proportion(data_type)
+
+@api.route(f"/api/{API_VERSION}/proportion/<data_type>/total")
+class ProportionDataTypeTotal(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"},
+    description="Returns the percentage of the world's population to be affected by COVID-19")
+    def get(self, data_type: str):
+        return proportion_region_world(data_type)
+
+@api.route(f"/api/{API_VERSION}/proportion/<data_type>/<country>/")
+class ProportionDataTypeCountry(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+    def get(self, data_type: str, country: str):
+        return proportion_country(data_type, country)
 
 
 @app.route("/")
