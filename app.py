@@ -27,7 +27,6 @@ ROUTES = [
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/total",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>",
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/regions",
-    f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/<region_name>"
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/<region_name>",
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>",
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/total",
