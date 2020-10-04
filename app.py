@@ -193,10 +193,10 @@ def proportion(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
         for region in list(data.keys()):
-            ret = {"proportion_history" : {}}
+            ret = {"proportion" : {}}
             if data[region]["iso3"] == "":
                 # TODO: Note, some regions do not have iso2/3 codes....
-                data[region] = {"proportion_history" : "This region doesn't work with this function atm"}
+                data[region] = {"proportion" : "This region doesn't work with this function atm"}
                 continue
             if data[region]["iso3"] in util.populations:
                 pop = float(util.populations[data[region]["iso3"]])
@@ -205,7 +205,7 @@ def proportion(data_type):
                 pop = float(util.populations[data[region]["iso3"]])
 
             for d, h in data[region]["history"].items():
-                ret["proportion_history"][d] = f"{round(h / pop * 100, 5):.5f}"
+                ret["proportion"][d] = f"{round(h / pop * 100, 5):.5f}"
 
             ret["iso2"] = data[region]["iso2"]
             ret["iso3"] = data[region]["iso3"]
@@ -218,7 +218,7 @@ def proportion(data_type):
 def proportion_country(data_type, country):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"proportion_history" : {}}
+        ret = {"proportion" : {}}
         for region in list(data.keys()):
             if util.pattern_match(
                 country,
@@ -232,7 +232,7 @@ def proportion_country(data_type, country):
                     pop = float(util.populations[data[region]["iso3"]])
 
                 for d, h in data[region]["history"].items():
-                    ret["proportion_history"][d] = f"{round(h / pop * 100, 5):.5f}"
+                    ret["proportion"][d] = f"{round(h / pop * 100, 5):.5f}"
 
                 ret["iso2"] = data[region]["iso2"]
                 ret["iso3"] = data[region]["iso3"]
@@ -248,15 +248,15 @@ def proportion_country(data_type, country):
 def proportion_region_world(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"proportion_history" : {}}
+        ret = {"proportion" : {}}
         for d in data.keys():
             for h in data[d]["history"].keys():
-                if h not in ret["proportion_history"]:
-                    ret["proportion_history"][h] = int(data[d]["history"][h])
+                if h not in ret["proportion"]:
+                    ret["proportion"][h] = int(data[d]["history"][h])
                 else:
-                    ret["proportion_history"][h] += int(data[d]["history"][h])
-        for h in ret["proportion_history"]:
-            ret["proportion_history"][h] = f"{round(int(ret['proportion_history'][h]) / int(util.WORLD_POPULATION) * 100, 5):.5f}"
+                    ret["proportion"][h] += int(data[d]["history"][h])
+        for h in ret["proportion"]:
+            ret["proportion"][h] = f"{round(int(ret['proportion'][h]) / int(util.WORLD_POPULATION) * 100, 5):.5f}"
         return jsonify(ret)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
