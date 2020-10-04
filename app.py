@@ -238,6 +238,29 @@ class HistoryDataTypeTotal(Resource):
         return history_region_world(data_type)
 
 
+@api.route(f"/api/{API_VERSION}/proportion/<data_type>/")
+class ProportionDataType(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+    def get(self, data_type: str):
+        return proportion(data_type)
+
+@api.route(f"/api/{API_VERSION}/proportion/<data_type>/total")
+class ProportionDataTypeTotal(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"},
+    description="Returns the percentage of the world's population to be affected by COVID-19")
+    def get(self, data_type: str):
+        return proportion_region_world(data_type)
+
+@api.route(f"/api/{API_VERSION}/proportion/<data_type>/<country>/")
+class ProportionDataTypeCountry(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+    def get(self, data_type: str, country: str):
+        return proportion_country(data_type, country)
+
+
 @app.route("/")
 def index():
     return jsonify(route_homepage)
