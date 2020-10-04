@@ -11,11 +11,10 @@ from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_restplus import Api, Resource, fields
+from prometheus_flask_exporter import PrometheusMetrics
 
 import src.utils as util
-from src.errors import RegionNotFound, CountryNotFound
-
-# from flask_restful import Api, Resource
+from src.errors import CountryNotFound, RegionNotFound
 
 API_VERSION = "v1"
 BASE_PATH = config("BASE_PATH")
@@ -36,7 +35,6 @@ SOURCES = [
 route_homepage = {
     "documentation": f"{BASE_PATH}/doc",
     "routes": ROUTES,
-    "<data_type>": "confirmed | recovered | deaths",
     "Api version": API_VERSION,
     "discord": "https://discord.gg/wTxbQYb",
     "sources": SOURCES,
@@ -50,6 +48,8 @@ responses = {
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+metrics = PrometheusMetrics(app, excluded_paths=["metrics"])
+
 limiter = Limiter(
     app,
     get_remote_address,
@@ -60,7 +60,7 @@ cache = Cache(
     app,
     config={
         "CACHE_TYPE": "simple",
-        "CACHE_DEFAULT_TIMEOUT": 15 * 60 # 30 minutes caching
+        "CACHE_DEFAULT_TIMEOUT": 15 * 60 # 15 minutes caching
     }
 )
 class SSLApiDoc(Api):
@@ -169,7 +169,6 @@ def history_region_all(data_type, country):
 @cache.memoize()
 def history_region_world(data_type):
     try:
-
         data = util.read_json(f"csv_{data_type}.json")
         ret = {"history" : {}}
         for d in data.keys():
