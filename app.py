@@ -33,7 +33,10 @@ ROUTES = [
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/<country>"
     f"{BASE_PATH}/api/{API_VERSION}/daily/<data_type>",
     f"{BASE_PATH}/api/{API_VERSION}/daily/<data_type>/total",
-    f"{BASE_PATH}/api/{API_VERSION}/daily/<data_type>/<country>"
+    f"{BASE_PATH}/api/{API_VERSION}/daily/<data_type>/<country>",
+    f"{BASE_PATH}/api/{API_VERSION}/proportion-daily/<data_type>",
+    f"{BASE_PATH}/api/{API_VERSION}/proportion-daily/<data_type>/total",
+    f"{BASE_PATH}/api/{API_VERSION}/proportion-daily/<data_type>/<country>",
 ]
 SOURCES = [
     "https://github.com/CSSEGISandData/COVID-19",
@@ -328,6 +331,80 @@ def daily_country(data_type, country):
         return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
+
+@cache.memoize()
+def proportion_daily(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        for region in list(data.keys()):
+            ret = {"proportion-daily" : {}}
+
+            if data[region]["iso3"] == "":
+                # TODO: Note, some regions do not have iso2/3 codes....
+                data[region] = {"proportion-daily" : "This region doesn't work with this function atm"}
+                continue
+            if data[region]["iso3"] in util.populations:
+                pop = float(util.populations[data[region]["iso3"]])
+            else:
+                util.populations = util.csv_to_dict(util.CSV_POPULATIONS)
+                pop = float(util.populations[data[region]["iso3"]])
+
+            prev = 0
+            for d, h in data[region]["history"].items():
+                ret["proportion-daily"][d] = f"{round((h - prev) / pop * 100, 10):.10f}"
+                prev = int(h)
+
+            ret["iso2"] = data[region]["iso2"]
+            ret["iso3"] = data[region]["iso3"]
+            data[region] = ret
+        return jsonify(data)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+@cache.memoize()
+def proportion_daily_region_world(data_type):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"proportion-daily" : {}}
+        for d in data.keys():
+            for h in data[d]["history"].keys():
+                if h not in ret["proportion-daily"]:
+                    ret["proportion-daily"][h] = int(data[d]["history"][h])
+                else:
+                    ret["proportion-daily"][h] += int(data[d]["history"][h])
+        prev = 0
+        for d, h in ret["proportion-daily"].items():
+            ret["proportion-daily"][d] = f"{round((h - prev) / int(util.WORLD_POPULATION) * 100, 10):.10f}"
+            prev = int(h)
+        return jsonify(ret)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
+
+@cache.memoize()
+def proportion_daily_country(data_type, country):
+    try:
+        data = util.read_json(f"csv_{data_type}.json")
+        ret = {"proportion-daily" : {}}
+        for region in list(data.keys()):
+            if util.pattern_match(
+                country,
+                region,
+                data[region]["iso2"],
+                data[region]["iso3"]):
+
+                if data[region]["iso3"] in util.populations:
+                    pop = float(util.populations[data[region]["iso3"]])
+                else:
+                    util.populations = util.csv_to_dict(util.CSV_POPULATIONS)
+                    pop = float(util.populations[data[region]["iso3"]])
+
+                prev = 0
+                for d, h in data[region]["history"].items():
+                    ret["proportion-daily"][d] = f"{round((h - prev) / pop * 100, 10):.10f}"
+                    prev = h
+                ret["iso2"] = data[region]["iso2"]
+                ret["iso3"] = data[region]["iso3"]
+                ret["name"] = region
                 return jsonify(ret)
         raise CountryNotFound("This region cannot be found. Please try again.")
     except CountryNotFound as e:
@@ -432,6 +509,27 @@ class DailyDataTypeCountry(Resource):
     params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return daily_country(data_type, country)
+
+@api.route(f"/api/{API_VERSION}/proportion-daily/<data_type>/")
+class ProportionDailyDataType(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+    def get(self, data_type: str):
+        return proportion_daily(data_type)
+
+@api.route(f"/api/{API_VERSION}/proportion-daily/<data_type>/total")
+class ProportionDailyDataTypeTotal(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+    def get(self, data_type: str):
+        return proportion_daily_region_world(data_type)
+
+@api.route(f"/api/{API_VERSION}/proportion-daily/<data_type>/<country>")
+class ProportionDailyDataTypeCountry(Resource):
+    @api.doc(responses=responses,
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+    def get(self, data_type: str, country: str):
+        return proportion_daily_country(data_type, country)
 
 
 @app.route("/")
