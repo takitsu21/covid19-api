@@ -294,9 +294,9 @@ def daily_region_world(data_type):
                 else:
                     ret["daily"][h] += int(data[d]["history"][h])
         prev = 0
-        for h in ret["daily"]:
-            ret["daily"][h] = int(ret['daily'][h]) - prev
-            prev = int(ret['daily'][h])
+        for d, h in ret["daily"].items():
+            ret["daily"][d] = h - prev
+            prev = int(h)
         return jsonify(ret)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
