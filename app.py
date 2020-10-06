@@ -123,7 +123,9 @@ def history_country(data_type, country):
                 region,
                 data[region]["iso2"],
                 data[region]["iso3"]):
-                return jsonify(data[region])
+                ret = data[region]
+                ret["name"] = region
+                return jsonify(ret)
         raise CountryNotFound("This region cannot be found. Please try again.")
     except CountryNotFound as e:
         return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
@@ -236,6 +238,7 @@ def proportion_country(data_type, country):
 
                 ret["iso2"] = data[region]["iso2"]
                 ret["iso3"] = data[region]["iso3"]
+                ret["name"] = region
                 return jsonify(ret)
         raise CountryNotFound("This region cannot be found. Please try again.")
     except CountryNotFound as e:
@@ -318,6 +321,13 @@ def daily_country(data_type, country):
                     prev = h
                 ret["iso2"] = data[region]["iso2"]
                 ret["iso3"] = data[region]["iso3"]
+                ret["name"] = region
+                return jsonify(ret)
+        raise CountryNotFound("This region cannot be found. Please try again.")
+    except CountryNotFound as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
+    except Exception as e:
+        return util.response_error(message=f"{type(e).__name__} : {e}")
                 return jsonify(ret)
         raise CountryNotFound("This region cannot be found. Please try again.")
     except CountryNotFound as e:
