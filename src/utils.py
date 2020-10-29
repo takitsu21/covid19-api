@@ -155,7 +155,7 @@ def region_csv_to_json(csv_fpath, is_us=False):
                         csv_json[country]["regions"][province] = {
                             "history": {}
                         }
-                    csv_json[country]["regions"][province]["history"][new_k] = int(row[key])
+                    csv_json[country]["regions"][province]["history"][new_k] = int(float(row[key]))
             else:
                 province = row[province_key]
                 for key in list(row.keys())[key_start:]:
@@ -165,9 +165,10 @@ def region_csv_to_json(csv_fpath, is_us=False):
                             "history": {}
                         }
                     if is_us and csv_json[country]["regions"][province]["history"].get(new_k):
-                        csv_json[country]["regions"][province]["history"][new_k] += int(row[key])
+                        csv_json[country]["regions"][province]["history"][new_k] += int(float(row[key]))
                     else:
-                        csv_json[country]["regions"][province]["history"][new_k] = int(row[key])
+                        csv_json[country]["regions"][province]["history"][new_k] = int(float(row[key]))
+
 
         for k in csv_json.keys():
             for iso in iso_data:
@@ -285,7 +286,7 @@ def require_appkey(view_function):
             request.headers.get('Authorization') == AUTHORIZATION:
             return view_function(*args, **kwargs)
         else:
-            return jsonify({"status": 401, "description": "This app required an API KEY if you would like to have one come over my discord https://discord.gg/wTxbQYb and ask to Taki#0853"})
+            return jsonify({"status": 401, "description": "This app requires an API KEY if you would like to get one come over to my discord https://discord.gg/wTxbQYb and ask Taki#0853"})
     return decorated_function
 
 def no_limit_owner():
