@@ -1,21 +1,12 @@
-import json
-import os
-import sqlite3
-import sys
-import threading
-import time
-
 from decouple import config
-from flask import Blueprint, Flask, Response, abort, jsonify, request, url_for
+from flask import Flask, jsonify, url_for
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_restplus import Api, Resource, fields
 
 import src.utils as util
-from src.errors import RegionNotFound, CountryNotFound
-
-# from flask_restful import Api, Resource
+from src.errors import CountryNotFound, RegionNotFound
 
 API_VERSION = "v1"
 BASE_PATH = config("BASE_PATH")
@@ -53,8 +44,10 @@ route_homepage = {
 }
 responses = {
     200: 'Success',
-    401: 'Unhautorized',
-    429: 'Rate limited'
+    401: 'Unauthorized',
+    429: 'Rate limited',
+    404: 'Not found',
+    500: 'Internal server error'
 }
 
 app = Flask(__name__)
@@ -69,7 +62,7 @@ cache = Cache(
     app,
     config={
         "CACHE_TYPE": "simple",
-        "CACHE_DEFAULT_TIMEOUT": 15 * 60 # 30 minutes caching
+        "CACHE_DEFAULT_TIMEOUT": 15 * 60 # 15 minutes caching
     }
 )
 class SSLApiDoc(Api):
