@@ -3,7 +3,7 @@ from flask import Flask, jsonify, url_for
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_restplus import Api, Resource, fields
+from flask_restplus import Api, Resource
 
 import src.utils as util
 from src.errors import CountryNotFound, RegionNotFound
@@ -21,7 +21,7 @@ ROUTES = [
     f"{BASE_PATH}/api/{API_VERSION}/history/<data_type>/<country>/<region_name>",
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>",
     f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/total",
-    f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/<country>"
+    f"{BASE_PATH}/api/{API_VERSION}/proportion/<data_type>/<country>",
     f"{BASE_PATH}/api/{API_VERSION}/daily/<data_type>",
     f"{BASE_PATH}/api/{API_VERSION}/daily/<data_type>/total",
     f"{BASE_PATH}/api/{API_VERSION}/daily/<data_type>/<country>",
