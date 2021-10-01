@@ -434,7 +434,7 @@ class HistoryDataType(Resource):
 @api.route(f"/api/{API_VERSION}/history/<data_type>/<country>/")
 class HistoryDataTypeCountry(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths` | `vaccinated`", "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return history_country(data_type, country)
 
