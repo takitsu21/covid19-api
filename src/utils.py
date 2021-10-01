@@ -17,6 +17,7 @@ APIFY_URL = "https://api.apify.com/v2/key-value-stores/SmuuI0oebnTWjRTUh/records
 CSV_CONFIRMED = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
 CSV_DEATHS = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
 CSV_RECOVERED = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
+CSV_VACCINATED = "https://raw.githubusercontent.com/govex/COVID-19/master/data_tables/vaccine_data/global_data/time_series_covid19_vaccine_doses_admin_global.csv"
 
 CSV_CONFIRMED_US = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"
 CSV_DEATHS_US = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv"
@@ -27,6 +28,7 @@ CSV_DEATHS_FPATH_US = "csv_deaths_us.csv"
 CSV_CONFIRMED_FPATH = "csv_confirmed.csv"
 CSV_DEATHS_FPATH = "csv_deaths.csv"
 CSV_RECOVERD_FPATH = "csv_recovered.csv"
+CSV_VACCINATED_FPATH = "csv_vaccinated.csv"
 
 CSV_POPULATIONS = "data/populations.csv"
 populations = {}
@@ -70,14 +72,17 @@ def update():
     dl_csv(CSV_CONFIRMED, CSV_CONFIRMED_FPATH)
     dl_csv(CSV_DEATHS, CSV_DEATHS_FPATH)
     dl_csv(CSV_RECOVERED, CSV_RECOVERD_FPATH)
+    dl_csv(CSV_VACCINATED, CSV_VACCINATED_FPATH)
     dl_csv(CSV_CONFIRMED_US, CSV_CONFIRMED_FPATH_US)
     dl_csv(CSV_DEATHS_US, CSV_DEATHS_FPATH_US)
     csv_to_json(CSV_CONFIRMED_FPATH)
     csv_to_json(CSV_DEATHS_FPATH)
     csv_to_json(CSV_RECOVERD_FPATH)
+    csv_to_json(CSV_VACCINATED_FPATH, is_govex=True)
     region_csv_to_json(CSV_CONFIRMED_FPATH)
     region_csv_to_json(CSV_DEATHS_FPATH)
     region_csv_to_json(CSV_RECOVERD_FPATH)
+    region_csv_to_json(CSV_VACCINATED_FPATH, is_govex=True)
     region_csv_to_json(CSV_CONFIRMED_FPATH_US, is_us=True)
     region_csv_to_json(CSV_DEATHS_FPATH_US, is_us=True)
     store_data()
@@ -87,26 +92,42 @@ def dl_csv(csv_type, fpath):
     with open(fpath, "w+") as f:
         f.write(r.text)
 
-def csv_to_json(csv_fpath):
+def csv_to_json(csv_fpath, is_govex=False):
     csv_json = {}
+
+    if is_govex:
+        province_key = "Province_State"
+        country_key = "Country_Region"
+        key_start = 12
+        date_format = "%Y-%m-%d"
+    else:
+        province_key = "Province/State"
+        country_key = "Country/Region"
+        key_start = 4
+        date_format = "%m/%d/%y"
+
     with open("iso-3166.json", "r") as isof:
         iso_data = json.load(isof)
     with open(csv_fpath, "r") as csv_file:
         data = csv.DictReader(csv_file)
         for row in data:
-            if row["Country/Region"] not in csv_json:
-                if row["Country/Region"] in SPECIAL_CASES:
-                    country = SPECIAL_CASES[row["Country/Region"]]["name"]
+            if row[country_key] not in csv_json:
+                if row[country_key] in SPECIAL_CASES:
+                    country = SPECIAL_CASES[row[country_key]]["name"]
                 else:
-                    country = row["Country/Region"]
+                    country = row[country_key]
                 csv_json[country] = {"history": {}}
-                for key in list(row.keys())[4:]:
-                    new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
-                    csv_json[country]["history"][new_k] = int(row[key])
-            else:
-                for key in list(row.keys())[4:]:
-                    new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
-                    csv_json[country]["history"][new_k] += int(row[key])
+                for key in list(row.keys())[key_start:]:
+                    new_k = datetime.datetime.strptime(key, date_format).strftime("%m/%d/%y")
+                    csv_json[country]["history"][new_k] = int(row[key]) if (row[key] != '') else 0
+            elif is_govex != True:
+                for key in list(row.keys())[key_start:]:
+                    new_k = datetime.datetime.strptime(key, date_format).strftime("%m/%d/%y")
+                    csv_json[country]["history"][new_k] += int(row[key]) if (row[key] != '') else 0
+
+        #print(csv_json[country]["history"])
+        #csv_json[country]["history"] = dict(sorted(csv_json[country]["history"].items(), key=lambda p: p[1]))
+        #print(csv_json[country]["history"])
 
         for k in csv_json.keys():
             for iso in iso_data:
@@ -124,16 +145,30 @@ def csv_to_json(csv_fpath):
         with open(csv_fpath.replace(".csv", ".json"), "w+") as f:
             f.write(str(json.dumps(csv_json)))
 
-def region_csv_to_json(csv_fpath, is_us=False):
+def region_csv_to_json(csv_fpath, is_us=False, is_govex=False):
     csv_json = {}
     if is_us:
         province_key = "Province_State"
         country_key = "Country_Region"
         key_start = 12
+        date_format = "%m/%d/%y"
     else:
         province_key = "Province/State"
         country_key = "Country/Region"
         key_start = 4
+        date_format = "%m/%d/%y"
+
+    if is_govex:
+        province_key = "Province_State"
+        country_key = "Country_Region"
+        key_start = 12
+        date_format = "%Y-%m-%d"
+    elif is_us == False:
+        province_key = "Province/State"
+        country_key = "Country/Region"
+        key_start = 4
+        date_format = "%m/%d/%y"
+
     with open("iso-3166.json", "r") as isof:
         iso_data = json.load(isof)
     with open(csv_fpath, "r") as csv_file:
@@ -150,24 +185,24 @@ def region_csv_to_json(csv_fpath, is_us=False):
                 csv_json[country] = {"regions": {}}
                 province = row[province_key]
                 for key in list(row.keys())[key_start:]:
-                    new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
+                    new_k = datetime.datetime.strptime(key, date_format).strftime("%m/%d/%y")
                     if province not in csv_json[country]["regions"]:
                         csv_json[country]["regions"][province] = {
                             "history": {}
                         }
-                    csv_json[country]["regions"][province]["history"][new_k] = int(float(row[key]))
-            else:
+                    csv_json[country]["regions"][province]["history"][new_k] = int(float(row[key])) if (row[key] != '') else 0
+            elif is_govex != True:
                 province = row[province_key]
                 for key in list(row.keys())[key_start:]:
-                    new_k = datetime.datetime.strptime(key, "%m/%d/%y").strftime("%m/%d/%y")
+                    new_k = datetime.datetime.strptime(key, date_format).strftime("%m/%d/%y")
                     if province not in csv_json[country]["regions"]:
                         csv_json[country]["regions"][province] = {
                             "history": {}
                         }
                     if is_us and csv_json[country]["regions"][province]["history"].get(new_k):
-                        csv_json[country]["regions"][province]["history"][new_k] += int(float(row[key]))
+                        csv_json[country]["regions"][province]["history"][new_k] += int(float(row[key])) if (row[key] != '') else 0
                     else:
-                        csv_json[country]["regions"][province]["history"][new_k] = int(float(row[key]))
+                        csv_json[country]["regions"][province]["history"][new_k] = int(float(row[key])) if (row[key] != '') else 0
 
 
         for k in csv_json.keys():
@@ -208,11 +243,16 @@ def replace_null_value(dataset: list):
     data_c = read_json(CSV_CONFIRMED_FPATH.replace(".csv", ".json"))
     data_r = read_json(CSV_RECOVERD_FPATH.replace(".csv", ".json"))
     data_d = read_json(CSV_DEATHS_FPATH.replace(".csv", ".json"))
+    data_v = read_json(CSV_VACCINATED_FPATH.replace(".csv", ".json"))
     for kv_replace in dataset:
         tmp = kv_replace
         confirmed = find_val_replace_null(tmp["country"], data_c, tmp["totalCases"])
         recovered = find_val_replace_null(tmp["country"], data_r, tmp["totalRecovered"])
         deaths = find_val_replace_null(tmp["country"], data_d, tmp["totalDeaths"])
+        # TODO: find / calculate data for whole world vaccinations
+        if tmp["country"] in data_v:
+            tmp["totalVaccinated"] = list(data_v[tmp["country"]]["history"].values())[-1]
+
         if tmp["totalCases"] is None:
             tmp["totalCases"] = confirmed
         if tmp["activeCases"] is None:
@@ -223,6 +263,7 @@ def replace_null_value(dataset: list):
             tmp["totalDeaths"] = deaths
         if tmp["totalRecovered"] is None:
             tmp["totalRecovered"] = recovered
+        
         new_dataset.append(tmp)
     return new_dataset
 
