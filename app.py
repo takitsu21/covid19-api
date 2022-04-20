@@ -1,12 +1,20 @@
+import sentry_sdk
 from decouple import config
 from flask import Flask, jsonify, url_for
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_restplus import Api, Resource
+from sentry_sdk.integrations.flask import FlaskIntegration
 
 import src.utils as util
 from src.errors import CountryNotFound, RegionNotFound
+
+sentry_sdk.init(
+    dsn="https://38a1330e31e3462f94ece0a6eddb7368@sentry.stantabcorp.net/6",
+    integrations=[FlaskIntegration()],
+    traces_sample_rate=1.0
+)
 
 API_VERSION = "v1"
 BASE_PATH = config("BASE_PATH")
@@ -51,6 +59,7 @@ responses = {
 }
 
 app = Flask(__name__)
+app.config['JSON_SORT_KEYS'] = False
 app.url_map.strict_slashes = False
 limiter = Limiter(
     app,
@@ -62,9 +71,11 @@ cache = Cache(
     app,
     config={
         "CACHE_TYPE": "simple",
-        "CACHE_DEFAULT_TIMEOUT": 15 * 60 # 15 minutes caching
+        "CACHE_DEFAULT_TIMEOUT": 15 * 60  # 15 minutes caching
     }
 )
+
+
 class SSLApiDoc(Api):
     @property
     def specs_url(self):
@@ -72,8 +83,9 @@ class SSLApiDoc(Api):
         scheme = 'http' if '5000' in self.base_url else 'https'
         return url_for(self.endpoint('specs'), _external=True, _scheme=scheme)
 
+
 api = SSLApiDoc(app, doc='/doc/', version='1.0', title='COVID19 API',
-        description="Coronavirus COVID 19 API")
+                description="Coronavirus COVID 19 API")
 
 
 @cache.memoize()
@@ -84,22 +96,24 @@ def all_data():
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def all_country(country):
     try:
         data = util.read_json("data.json")
         for region in data:
             if util.pattern_match(
-                country,
-                region["country"],
-                region["iso2"],
-                region["iso3"]):
+                    country,
+                    region["country"],
+                    region["iso2"],
+                    region["iso3"]):
                 return jsonify(region)
         raise CountryNotFound("This region cannot be found. Please try again.")
     except CountryNotFound as e:
         return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
+
 
 @cache.memoize()
 def history(data_type):
@@ -109,16 +123,17 @@ def history(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def history_country(data_type, country):
     try:
         data = util.read_json(f"csv_{data_type}.json")
         for region in list(data.keys()):
             if util.pattern_match(
-                country,
-                region,
-                data[region]["iso2"],
-                data[region]["iso3"]):
+                    country,
+                    region,
+                    data[region]["iso2"],
+                    data[region]["iso3"]):
                 ret = data[region]
                 ret["name"] = region
                 return jsonify(ret)
@@ -127,6 +142,7 @@ def history_country(data_type, country):
         return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
+
 
 @cache.memoize()
 def history_region(data_type, country, region_name):
@@ -137,10 +153,10 @@ def history_region(data_type, country, region_name):
             data = util.read_json(f"csv_{data_type}_region.json")
         for inner_country in list(data.keys()):
             if util.pattern_match(
-                country,
-                inner_country,
-                data[inner_country]["iso2"],
-                data[inner_country]["iso3"]):
+                    country,
+                    inner_country,
+                    data[inner_country]["iso2"],
+                    data[inner_country]["iso3"]):
                 for region in data[inner_country]["regions"]:
                     if region.lower() == region_name.lower():
                         return jsonify(data[inner_country]["regions"][region])
@@ -149,6 +165,7 @@ def history_region(data_type, country, region_name):
         return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
+
 
 @cache.memoize()
 def history_region_all(data_type, country):
@@ -159,23 +176,25 @@ def history_region_all(data_type, country):
             data = util.read_json(f"csv_{data_type}_region.json")
         for inner_country in list(data.keys()):
             if util.pattern_match(
-                country,
-                inner_country,
-                data[inner_country]["iso2"],
-                data[inner_country]["iso3"]):
+                    country,
+                    inner_country,
+                    data[inner_country]["iso2"],
+                    data[inner_country]["iso3"]):
                 return jsonify(data[inner_country]["regions"])
-        raise CountryNotFound("This country cannot be found. Please try again.")
+        raise CountryNotFound(
+            "This country cannot be found. Please try again.")
     except CountryNotFound as e:
         return util.response_error(message=f"{type(e).__name__} : {e}", status=404)
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
+
 
 @cache.memoize()
 def history_region_world(data_type):
     try:
 
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"history" : {}}
+        ret = {"history": {}}
         for d in data.keys():
             for h in data[d]["history"].keys():
                 if h not in ret["history"]:
@@ -186,15 +205,17 @@ def history_region_world(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def proportion(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
         for region in list(data.keys()):
-            ret = {"proportion" : {}}
+            ret = {"proportion": {}}
             if data[region]["iso3"] == "":
                 # TODO: Note, some regions do not have iso2/3 codes....
-                data[region] = {"proportion" : "This region doesn't work with this function atm"}
+                data[region] = {
+                    "proportion": "This region doesn't work with this function atm"}
                 continue
             if data[region]["iso3"] in util.populations:
                 pop = float(util.populations[data[region]["iso3"]])
@@ -212,17 +233,18 @@ def proportion(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def proportion_country(data_type, country):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"proportion" : {}}
+        ret = {"proportion": {}}
         for region in list(data.keys()):
             if util.pattern_match(
-                country,
-                region,
-                data[region]["iso2"],
-                data[region]["iso3"]):
+                    country,
+                    region,
+                    data[region]["iso2"],
+                    data[region]["iso3"]):
                 if data[region]["iso3"] in util.populations:
                     pop = float(util.populations[data[region]["iso3"]])
                 else:
@@ -247,7 +269,7 @@ def proportion_country(data_type, country):
 def proportion_region_world(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"proportion" : {}}
+        ret = {"proportion": {}}
         for d in data.keys():
             for h in data[d]["history"].keys():
                 if h not in ret["proportion"]:
@@ -266,7 +288,7 @@ def daily(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
         for region in list(data.keys()):
-            ret = {"daily" : {}}
+            ret = {"daily": {}}
 
             prev = 0
             for d, h in data[region]["history"].items():
@@ -285,7 +307,7 @@ def daily(data_type):
 def daily_region_world(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"daily" : {}}
+        ret = {"daily": {}}
         for d in data.keys():
             for h in data[d]["history"].keys():
                 if h not in ret["daily"]:
@@ -300,17 +322,18 @@ def daily_region_world(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def daily_country(data_type, country):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"daily" : {}}
+        ret = {"daily": {}}
         for region in list(data.keys()):
             if util.pattern_match(
-                country,
-                region,
-                data[region]["iso2"],
-                data[region]["iso3"]):
+                    country,
+                    region,
+                    data[region]["iso2"],
+                    data[region]["iso3"]):
                 prev = 0
                 for d, h in data[region]["history"].items():
                     ret["daily"][d] = h - prev
@@ -325,16 +348,18 @@ def daily_country(data_type, country):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def proportion_daily(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
         for region in list(data.keys()):
-            ret = {"proportion-daily" : {}}
+            ret = {"proportion-daily": {}}
 
             if data[region]["iso3"] == "":
                 # TODO: Note, some regions do not have iso2/3 codes....
-                data[region] = {"proportion-daily" : "This region doesn't work with this function atm"}
+                data[region] = {
+                    "proportion-daily": "This region doesn't work with this function atm"}
                 continue
             if data[region]["iso3"] in util.populations:
                 pop = float(util.populations[data[region]["iso3"]])
@@ -354,11 +379,12 @@ def proportion_daily(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def proportion_daily_region_world(data_type):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"proportion-daily" : {}}
+        ret = {"proportion-daily": {}}
         for d in data.keys():
             for h in data[d]["history"].keys():
                 if h not in ret["proportion-daily"]:
@@ -373,17 +399,18 @@ def proportion_daily_region_world(data_type):
     except Exception as e:
         return util.response_error(message=f"{type(e).__name__} : {e}")
 
+
 @cache.memoize()
 def proportion_daily_country(data_type, country):
     try:
         data = util.read_json(f"csv_{data_type}.json")
-        ret = {"proportion-daily" : {}}
+        ret = {"proportion-daily": {}}
         for region in list(data.keys()):
             if util.pattern_match(
-                country,
-                region,
-                data[region]["iso2"],
-                data[region]["iso3"]):
+                    country,
+                    region,
+                    data[region]["iso2"],
+                    data[region]["iso3"]):
 
                 if data[region]["iso3"] in util.populations:
                     pop = float(util.populations[data[region]["iso3"]])
@@ -431,7 +458,8 @@ class HistoryDataType(Resource):
 @api.route(f"/api/{API_VERSION}/history/<data_type>/<country>/")
 class HistoryDataTypeCountry(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`",
+                     "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return history_country(data_type, country)
 
@@ -439,7 +467,8 @@ class HistoryDataTypeCountry(Resource):
 @api.route(f"/api/{API_VERSION}/history/<data_type>/<country>/<region>")
 class HistoryDataTypeRegion(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1", "region": "Region name"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`",
+                     "country": "Full name or ISO-3166-1", "region": "Region name"})
     def get(self, data_type: str, country: str, region: str):
         return history_region(data_type, country, region)
 
@@ -447,7 +476,8 @@ class HistoryDataTypeRegion(Resource):
 @api.route(f"/api/{API_VERSION}/history/<data_type>/<country>/regions")
 class HistoryDataTypeRegions(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`",
+                     "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return history_region_all(data_type, country)
 
@@ -455,7 +485,7 @@ class HistoryDataTypeRegions(Resource):
 @api.route(f"/api/{API_VERSION}/history/<data_type>/total")
 class HistoryDataTypeTotal(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
     def get(self, data_type: str):
         return history_region_world(data_type)
 
@@ -463,64 +493,76 @@ class HistoryDataTypeTotal(Resource):
 @api.route(f"/api/{API_VERSION}/proportion/<data_type>/")
 class ProportionDataType(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
     def get(self, data_type: str):
         return proportion(data_type)
+
 
 @api.route(f"/api/{API_VERSION}/proportion/<data_type>/total")
 class ProportionDataTypeTotal(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"},
-    description="Returns the percentage of the world's population to be affected by COVID-19")
+             params={
+                 "data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"},
+             description="Returns the percentage of the world's population to be affected by COVID-19")
     def get(self, data_type: str):
         return proportion_region_world(data_type)
+
 
 @api.route(f"/api/{API_VERSION}/proportion/<data_type>/<country>/")
 class ProportionDataTypeCountry(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`",
+                     "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return proportion_country(data_type, country)
+
 
 @api.route(f"/api/{API_VERSION}/daily/<data_type>/")
 class DailyDataType(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
     def get(self, data_type: str):
         return daily(data_type)
+
 
 @api.route(f"/api/{API_VERSION}/daily/<data_type>/total")
 class DailyDataTypeTotal(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
     def get(self, data_type: str):
         return daily_region_world(data_type)
+
 
 @api.route(f"/api/{API_VERSION}/daily/<data_type>/<country>/")
 class DailyDataTypeCountry(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`",
+                     "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return daily_country(data_type, country)
+
 
 @api.route(f"/api/{API_VERSION}/proportion-daily/<data_type>/")
 class ProportionDailyDataType(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
     def get(self, data_type: str):
         return proportion_daily(data_type)
+
 
 @api.route(f"/api/{API_VERSION}/proportion-daily/<data_type>/total")
 class ProportionDailyDataTypeTotal(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`"})
     def get(self, data_type: str):
         return proportion_daily_region_world(data_type)
+
 
 @api.route(f"/api/{API_VERSION}/proportion-daily/<data_type>/<country>")
 class ProportionDailyDataTypeCountry(Resource):
     @api.doc(responses=responses,
-    params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`", "country": "Full name or ISO-3166-1"})
+             params={"data_type": "Input accepted : `confirmed` | `recovered` | `deaths`",
+                     "country": "Full name or ISO-3166-1"})
     def get(self, data_type: str, country: str):
         return proportion_daily_country(data_type, country)
 
@@ -528,6 +570,7 @@ class ProportionDailyDataTypeCountry(Resource):
 @app.route("/")
 def index():
     return jsonify(route_homepage)
+
 
 @app.route(f"/api/")
 def index_api():
@@ -538,16 +581,15 @@ def index_api():
 def index_api_version():
     return jsonify(route_homepage)
 
-
-# if __name__ == '__main__':
-#     try:
-#         app.run(debug=True, host="0.0.0.0", port=5000)
-#     except KeyboardInterrupt:
-#         with app.app_context():
-#             cache.clear()
-#         exit(0)
-#     except Exception as e:
-#         print(type(e).__name__, e)
-#         with app.app_context():
-#             cache.clear()
-#         exit(1)
+if __name__ == '__main__':
+    try:
+        app.run(debug=True, host="0.0.0.0", port=5000)
+    except KeyboardInterrupt:
+        with app.app_context():
+            cache.clear()
+        exit(0)
+    except Exception as e:
+        print(type(e).__name__, e)
+        with app.app_context():
+            cache.clear()
+        exit(1)

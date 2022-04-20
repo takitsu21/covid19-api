@@ -1,6 +1,10 @@
-flask
+flask~=1.1.2
 flask_caching
 flask_limiter
-requests
+requests~=2.25.1
 python-decouple
 flask_restplus
+Werkzeug==0.16.1
+sentry-sdk[flask]
+markupsafe==2.0.1
+gunicorn[gevent]
